@@ -50,7 +50,7 @@ class BaseRULPreprocessor(ABC):
         self.window = window
         self._clip_test_target = clip_test_target
 
-    # ---- encapsulated, validated attributes ----
+    # encapsulated, validated attributes
     @property
     def rul_cap(self):
         return self._rul_cap
@@ -71,7 +71,7 @@ class BaseRULPreprocessor(ABC):
             raise ValueError("window must be >= 1")
         self._window = int(value)
 
-    # ---- shared behaviour inherited by every subclass ----
+    # shared behaviour inherited by every subclass
     @staticmethod
     def find_constant_columns(df):
         return [c for c in df.columns if df[c].nunique() == 1]
@@ -98,6 +98,13 @@ class BaseRULPreprocessor(ABC):
     def prepare(self, train_df, test_df, test_last):
         """Return (X_train, y_train, X_test, y_test) in the form the model needs."""
 
+    @abstractmethod
+    def engine_inputs(self, engine_df):
+        """Turn the raw history of ONE engine into (model_inputs, cycle_numbers).
+
+        Row i of the inputs is what the model sees at cycle_numbers[i], using only
+        cycles up to that point. Needs prepare() to have run first for fitted scalers."""
+
     def __repr__(self):
         return f"{type(self).__name__}(rul_cap={self._rul_cap}, window={self._window})"
 
@@ -115,7 +122,7 @@ class BaseRULModel(ABC):
         self._model = None
         self._is_fitted = False
 
-    # ---- encapsulation: read-only / validated access ----
+    # encapsulation: read-only / validated access
     @property
     def name(self):
         return self._name
@@ -138,7 +145,7 @@ class BaseRULModel(ABC):
             raise ValueError("rul_cap must be positive")
         self._rul_cap = value
 
-    # ---- abstract steps every model must implement ----
+    # abstract steps every model must implement
     @abstractmethod
     def _build_model(self, X):
         """Create and return the underlying estimator (X is given for shape information)."""
@@ -155,11 +162,15 @@ class BaseRULModel(ABC):
     def save(self, path):
         """Persist the trained model."""
 
-    # ---- optional hook (subclasses may override) ----
+    @abstractmethod
+    def load(self, path):
+        """Restore a model written by save() so it can predict without retraining."""
+
+    # optional hook (subclasses may override)
     def _postprocess(self, predictions):
         return predictions
 
-    # ---- concrete public API (shared by all subclasses) ----
+    # concrete public API (shared by all subclasses)
     def fit(self, X, y, **kwargs):
         self._model = self._build_model(X)
         self._fit_model(X, y, **kwargs)

@@ -23,7 +23,7 @@ class CMAPSSDataLoader:
             data_dir = Path(__file__).resolve().parent.parent / "CMaps"
         self.data_dir = Path(data_dir)
 
-    # ---------- file reading ----------
+    # file reading
     def _read(self, path):
         # space-separated, no header
         return pd.read_csv(path, sep=r"\s+", header=None, names=self.ALL_COLS)
@@ -31,7 +31,7 @@ class CMAPSSDataLoader:
     def _read_rul(self, path):
         return pd.read_csv(path, header=None, names=["RUL"])
 
-    # ---------- RUL construction ----------
+    # RUL construction
     @staticmethod
     def _add_train_rul(train_df):
         # raw (unclipped) RUL = last cycle of the engine - current cycle
@@ -46,7 +46,7 @@ class CMAPSSDataLoader:
         test_last["RUL"] = rul_true["RUL"].values
         return test_last
 
-    # ---------- public API ----------
+    # public API
     def load(self):
         train_df = self._read(self.data_dir / f"train_{self.subset}.txt")
         test_df = self._read(self.data_dir / f"test_{self.subset}.txt")
