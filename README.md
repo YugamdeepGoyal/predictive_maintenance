@@ -4,7 +4,7 @@ A small project that estimates how many flight cycles a jet engine has left befo
 
 I built it to compare two very different approaches on the same problem: gradient boosted trees on hand-made rolling features (XGBoost), and a recurrent network that reads a window of recent cycles (LSTM). The app lets you use either one.
 
-## What the app does
+## What the app does:
 
 The app has two views, switched from the top of the page.
 
