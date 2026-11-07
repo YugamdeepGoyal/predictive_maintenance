@@ -6,6 +6,8 @@ A Streamlit front end for the C-MAPSS FD001 remaining useful life models.
                          one clear answer: how many flight cycles the engine has left.
   * Analyst dashboard  - the replay / fault injection / fleet / OOP view, kept as a
                          second option for analysts and developers.
+  * User manual        - a plain language guide to the data, the sensors, the results
+                         and the dashboard, so nobody has to open the README.
 
 Run it from the project root (the folder that has src/ and CMaps/):
 
@@ -41,6 +43,109 @@ SENSORS = BaseRULPreprocessor.SENSOR_COLS
 COLORS = {"Actual": "#8a8f98", "XGBoost": "#e8833a", "LSTM": "#3b82c4"}
 
 ZONE = {"CRITICAL": "#E5594A", "WATCH": "#E9B23A", "HEALTHY": "#4FB27E"}
+
+# Names shown in the front end. Only the display changes, the models still see the
+# original column names (sensor_2, sensor_3 and so on). Units follow the NASA C-MAPSS
+# documentation. Tuple layout: symbol, name, unit, what it measures, usual trend in FD001.
+SENSOR_INFO = {
+    "sensor_2": ("T24", "LPC outlet temperature", "deg R",
+                 "Temperature of the air leaving the low pressure compressor.", "Usually rises"),
+    "sensor_3": ("T30", "HPC outlet temperature", "deg R",
+                 "Temperature of the air leaving the high pressure compressor.", "Usually rises"),
+    "sensor_4": ("T50", "LPT outlet temperature", "deg R",
+                 "Temperature of the gas leaving the low pressure turbine.", "Usually rises"),
+    "sensor_6": ("P15", "Bypass duct pressure", "psia",
+                 "Total pressure in the bypass duct that carries air around the core.", "Weak or mixed"),
+    "sensor_7": ("P30", "HPC outlet pressure", "psia",
+                 "Total pressure of the air leaving the high pressure compressor.", "Usually falls"),
+    "sensor_8": ("Nf", "Fan speed", "rpm",
+                 "How fast the fan at the front of the engine is spinning.", "Usually rises"),
+    "sensor_9": ("Nc", "Core speed", "rpm",
+                 "How fast the engine core (compressor and turbine shaft) is spinning.", "Usually rises"),
+    "sensor_11": ("Ps30", "HPC outlet static pressure", "psia",
+                  "Static pressure at the high pressure compressor outlet.", "Usually rises"),
+    "sensor_12": ("phi", "Fuel flow to Ps30 ratio", "pps/psi",
+                  "Fuel flow divided by Ps30, a measure of how much fuel the engine needs.", "Usually falls"),
+    "sensor_13": ("NRf", "Corrected fan speed", "rpm",
+                  "Fan speed adjusted for the air conditions, so flights can be compared.", "Usually rises"),
+    "sensor_14": ("NRc", "Corrected core speed", "rpm",
+                  "Core speed adjusted for the air conditions, so flights can be compared.", "Weak or mixed"),
+    "sensor_15": ("BPR", "Bypass ratio", "none",
+                  "Air that goes around the core divided by air that goes through it.", "Usually rises"),
+    "sensor_17": ("htBleed", "Bleed enthalpy", "none",
+                  "Energy content of the air bled off the compressor.", "Usually rises"),
+    "sensor_20": ("W31", "HPT coolant bleed", "lbm/s",
+                  "Cooling air sent to the high pressure turbine.", "Usually falls"),
+    "sensor_21": ("W32", "LPT coolant bleed", "lbm/s",
+                  "Cooling air sent to the low pressure turbine.", "Usually falls"),
+}
+
+# Sensors the models do not use because they never change in FD001
+UNUSED_INFO = {
+    "setting_3": ("TRA", "Throttle resolver angle"),
+    "sensor_1": ("T2", "Fan inlet temperature"),
+    "sensor_5": ("P2", "Fan inlet pressure"),
+    "sensor_10": ("epr", "Engine pressure ratio"),
+    "sensor_16": ("farB", "Burner fuel air ratio"),
+    "sensor_18": ("Nf_dmd", "Demanded fan speed"),
+    "sensor_19": ("PCNfR_dmd", "Demanded corrected fan speed"),
+}
+
+# Tuple layout: name, unit, what it means
+SETTING_INFO = {
+    "setting_1": ("Altitude", "ft", "How high the aircraft is flying during this cycle."),
+    "setting_2": ("Mach number", "none",
+                  "Flight speed as a fraction of the speed of sound."),
+}
+
+
+def sensor_short(col):
+    """Friendly name for charts and tables, for example 'Fan speed (Nf)'."""
+    if col in SENSOR_INFO:
+        symbol, name = SENSOR_INFO[col][:2]
+        return f"{name} ({symbol})"
+    if col in SETTING_INFO:
+        return SETTING_INFO[col][0]
+    return col
+
+
+def sensor_label(col):
+    """Text for dropdowns. Keeps the column name so it still matches the CSV."""
+    short = sensor_short(col)
+    return col if short == col else f"{col} \u00b7 {short}"
+
+
+def sensor_help(col):
+    """One sentence about a column, used for tooltips and captions."""
+    if col in SENSOR_INFO:
+        symbol, name, unit, text, _ = SENSOR_INFO[col]
+        return f"{name} ({symbol}), measured in {unit}. {text}"
+    if col in SETTING_INFO:
+        name, unit, text = SETTING_INFO[col]
+        return f"{name}, measured in {unit}. {text}"
+    if col == "cycle":
+        return "Flight number, counting from the engine's first flight."
+    if col == "engine_id":
+        return "Which engine the row belongs to. Optional."
+    return col
+
+
+def glossary_frame():
+    """Every input column with its friendly name, unit and meaning."""
+    rows = [
+        {"Column": "engine_id", "Name": "Engine number", "Unit": "none",
+         "What it is": "Which engine the row belongs to. Optional.", "Usual trend": ""},
+        {"Column": "cycle", "Name": "Flight number", "Unit": "count",
+         "What it is": "Flight number, counting from the engine's first flight.", "Usual trend": ""},
+    ]
+    for col, (name, unit, text) in SETTING_INFO.items():
+        rows.append({"Column": col, "Name": name, "Unit": unit, "What it is": text,
+                     "Usual trend": ""})
+    for col, (symbol, name, unit, text, trend) in SENSOR_INFO.items():
+        rows.append({"Column": col, "Name": f"{name} ({symbol})", "Unit": unit,
+                     "What it is": text, "Usual trend": trend})
+    return pd.DataFrame(rows)
+
 
 PAGE_STYLE = """
 <style>
@@ -348,7 +453,8 @@ class ConsoleApp:
             return
 
         watch_sensors = st.multiselect(
-            "Sensors to watch", SENSORS, default=["sensor_11", "sensor_4", "sensor_12"])
+            "Sensors to watch", SENSORS, default=["sensor_11", "sensor_4", "sensor_12"],
+            format_func=sensor_label)
         left, right = st.columns([5, 1])
         with left:
             cycle = st.slider("Cycle", first_ok, last, last, key=f"cycle_{s.engine}")
@@ -415,6 +521,7 @@ class ConsoleApp:
             z = window.sub(a.sensor_mean[watch_sensors], axis="columns")
             z = z.div(a.sensor_std[watch_sensors], axis="columns")
             z = z.reset_index().melt("cycle", var_name="sensor", value_name="z")
+            z["sensor"] = z["sensor"].map(sensor_short)
             sensor_chart = alt.Chart(z).mark_line().encode(
                 x=alt.X("cycle:Q", title="Cycle", scale=x_scale),
                 y=alt.Y("z:Q", title="Std devs from fleet average"),
@@ -427,9 +534,11 @@ class ConsoleApp:
                  "this engine. The models re read the doctored history and tell you how much "
                  "life they think just disappeared.")
         c1, c2, c3 = st.columns(3)
-        sensor = c1.selectbox("Sensor", SENSORS, index=SENSORS.index("sensor_11"))
+        sensor = c1.selectbox("Sensor", SENSORS, index=SENSORS.index("sensor_11"),
+                              format_func=sensor_label)
         sigma = c2.slider("Drift size (std devs)", -4.0, 4.0, 2.0, 0.5)
         n_last = c3.slider("Applied over the last N cycles", 3, 60, 15)
+        st.caption(sensor_help(sensor))
 
         eng = self.assets.engine_frame(s.engine)
         doctored = self.assets.inject(eng, sensor, sigma, n_last)
@@ -449,7 +558,7 @@ class ConsoleApp:
         trace = trace[trace["cycle"] >= trace["cycle"].max() - 80]
         chart = alt.Chart(trace).mark_line().encode(
             x=alt.X("cycle:Q", title="Cycle"),
-            y=alt.Y("value:Q", title=sensor, scale=alt.Scale(zero=False)),
+            y=alt.Y("value:Q", title=sensor_short(sensor), scale=alt.Scale(zero=False)),
             color=alt.Color("version:N", legend=alt.Legend(title=None, orient="top"),
                             scale=alt.Scale(domain=["Original", "Doctored"],
                                             range=["#8a8f98", "#d64545"])))
@@ -466,7 +575,7 @@ class ConsoleApp:
                 for i, name in enumerate(SENSORS):
                     new = float(bundle.history(
                         self.assets.inject(eng, name, sigma, n_last))["RUL"].iloc[-1])
-                    rows.append({"sensor": name, "change": new - base, "size": abs(new - base)})
+                    rows.append({"sensor": sensor_short(name), "change": new - base, "size": abs(new - base)})
                     bar.progress((i + 1) / len(SENSORS))
                 bar.empty()
                 res = pd.DataFrame(rows)
@@ -698,6 +807,7 @@ class PredictPage:
             "it can fly before maintenance is due.</p></div>"
             + svg_img(fan_svg(), "fan") + "</div>",
             unsafe_allow_html=True)
+        st.caption("New here? Open the User manual from the switch at the top of the page.")
 
         st.subheader("Your engine data")
         mode = st.radio("How do you want to add it?", self.MODES, horizontal=True,
@@ -734,15 +844,14 @@ class PredictPage:
                            self._template_frame().to_csv(index=False).encode(),
                            "engine_template.csv", "text/csv")
         with st.expander("What should the file contain?"):
-            st.markdown(
-                "One row per flight cycle, with these columns:\n\n"
-                f"- `cycle`: the flight number, counting from the engine's first flight\n"
-                f"- `setting_1`, `setting_2`\n"
-                f"- {', '.join(f'`{c}`' for c in SENSORS)}\n"
-                "- `engine_id` (optional): add it to score several engines in one file\n\n"
-                "Aim for at least 30 cycles per engine. The models were trained on the NASA "
-                "C-MAPSS FD001 turbofan data, so they are only reliable for engines that "
-                "behave like it. Raw NASA `.txt` files with no header also work.")
+            st.markdown("One row per flight cycle, with the columns below. Everything is needed "
+                        "except `engine_id` and `cycle`, which are optional.")
+            table = glossary_frame()[["Column", "Name", "Unit", "What it is"]]
+            st.dataframe(table, hide_index=True)
+            st.markdown("Aim for at least 30 cycles per engine. The models were trained on the NASA "
+                        "C-MAPSS FD001 turbofan data, so they are only reliable for engines that "
+                        "behave like it. Raw NASA `.txt` files with no header also work. "
+                        "The **User manual** at the top of the page explains every column in more detail.")
         if file is None:
             st.info("Upload a file to get a prediction, or try an example first.")
             return None
@@ -754,9 +863,14 @@ class PredictPage:
 
     def _from_table(self):
         st.caption("The table starts with example values. Type your own readings over them, "
-                   "one row per flight cycle, and use the + at the bottom to add rows.")
-        return st.data_editor(self._template_frame(with_id=False), num_rows="dynamic",
-                              key="manual_table")
+                   "one row per flight cycle, and use the + at the bottom to add rows. "
+                   "Hover over a column title to see what the sensor measures.")
+        frame = self._template_frame(with_id=False)
+        config = {col: st.column_config.NumberColumn(
+            sensor_short(col) if col != "cycle" else "Cycle", help=f"{col}: {sensor_help(col)}")
+            for col in frame.columns}
+        return st.data_editor(frame, num_rows="dynamic", key="manual_table",
+                              column_config=config)
 
     def _from_example(self):
         if "example_engine" not in st.session_state:
@@ -870,8 +984,252 @@ class PredictPage:
                               critical, watch)
 
 
+class ManualPage:
+    """The project manual, written for people who just want to use the app."""
+
+    def run(self):
+        st.markdown(
+            '<div class="hero"><div><h1>User manual</h1>'
+            "<p>Everything you need to use the app: what to upload, what each sensor means, "
+            "how to read the result and what the analyst dashboard is for.</p></div>"
+            + svg_img(fan_svg(), "fan") + "</div>",
+            unsafe_allow_html=True)
+
+        tabs = st.tabs(["Quick start", "Your data", "Sensor guide", "Reading the result",
+                        "Models", "Analyst dashboard", "Help and limits"])
+        with tabs[0]:
+            self._quick_start()
+        with tabs[1]:
+            self._your_data()
+        with tabs[2]:
+            self._sensor_guide()
+        with tabs[3]:
+            self._results()
+        with tabs[4]:
+            self._models()
+        with tabs[5]:
+            self._dashboard()
+        with tabs[6]:
+            self._help()
+
+    @staticmethod
+    def _quick_start():
+        st.subheader("What this app does")
+        st.write("A jet engine is checked and serviced after a certain number of flights. This app "
+                 "reads the sensor values recorded on each flight and estimates how many more "
+                 "flights the engine can safely make. That number is called the **remaining useful "
+                 "life**, or RUL. One flight is one **cycle**.")
+
+        st.subheader("Get a prediction in four steps")
+        st.markdown(
+            "1. Stay on the **Predict** view, which is the first option in the switch at the top.\n"
+            "2. Choose how to add data: **Upload a CSV**, **Enter readings manually**, or "
+            "**Try an example**.\n"
+            "3. Read the result panel. The big number is the estimated cycles left and the coloured "
+            "label tells you how urgent it is.\n"
+            "4. Open **Options** below the result if you want to switch the model or move the "
+            "alert levels.")
+
+        st.subheader("Not sure where to start?")
+        st.info("Pick **Try an example**. It loads a real NASA test engine, shows the model's "
+                "estimate and also shows the true remaining life, so you can see how close the "
+                "model got. Use **Try a different example** to move to another engine.")
+
+        st.subheader("The three views")
+        st.dataframe(pd.DataFrame({
+            "View": ["Predict", "Analyst dashboard", "User manual"],
+            "Use it to": ["Get an answer for your own engine data",
+                          "Replay engines, test faults, compare models and see the class design",
+                          "Learn what every input and output means"]}), hide_index=True)
+
+    @staticmethod
+    def _your_data():
+        st.subheader("The three ways to add data")
+        st.markdown(
+            "- **Upload a CSV**: best for real data. You can also download a template CSV from "
+            "that page and fill it in.\n"
+            "- **Enter readings manually**: an editable table that starts with example values. "
+            "Type over them and use the + at the bottom to add rows.\n"
+            "- **Try an example**: a real NASA test engine that the models have never seen.")
+
+        st.subheader("Columns your file needs")
+        st.write("One row per flight cycle. Every column in this table is needed except "
+                 "`engine_id` and `cycle`, which are optional.")
+        st.dataframe(glossary_frame()[["Column", "Name", "Unit", "What it is"]], hide_index=True)
+
+        st.subheader("Rules that save time")
+        st.markdown(
+            "- Commas, semicolons and tabs all work as separators.\n"
+            "- The original NASA `.txt` files with no header row also work.\n"
+            "- If there is no `cycle` column, rows are numbered 1, 2, 3 in the order given.\n"
+            "- Add an `engine_id` column to score several engines in one file. You then get a "
+            "table sorted by how close each engine is to failure.\n"
+            "- Blank cells are filled with the nearest reading from the same engine and the app "
+            "tells you when that happens.\n"
+            "- Give at least 30 cycles per engine. XGBoost runs on less but the estimate gets "
+            "shaky, and the LSTM refuses to run on fewer than 30.\n"
+            "- Start counting `cycle` from the engine's first flight, because the cycle number "
+            "is one of the things the XGBoost model looks at.")
+
+    @staticmethod
+    def _sensor_guide():
+        st.subheader("How to read the sensor names")
+        st.write("Air flows through a turbofan from the front to the back: **fan**, then the low "
+                 "pressure compressor (**LPC**), the high pressure compressor (**HPC**), the "
+                 "combustor where fuel burns, the high pressure turbine (**HPT**) and finally the "
+                 "low pressure turbine (**LPT**). Each sensor sits at one of these stages, and its "
+                 "short symbol, such as T24 or Ps30, is the name engineers use for it.")
+        st.markdown(
+            "- **T** is a temperature, **P** is a pressure and **Ps** is a static pressure.\n"
+            "- **N** is a rotation speed. A leading **NR** means the speed is corrected for air "
+            "conditions.\n"
+            "- **W** is a coolant flow. **BPR** is the bypass ratio.")
+
+        st.subheader("Look up a sensor")
+        query = st.text_input("Search by column, name or symbol", placeholder="for example fan or Ps30",
+                              key="manual_sensor_search")
+        table = glossary_frame()
+        table = table[~table["Column"].isin(["engine_id", "cycle"])]
+        if query.strip():
+            q = query.strip().lower()
+            mask = table.apply(lambda row: q in " ".join(row.astype(str)).lower(), axis=1)
+            table = table[mask]
+        if table.empty:
+            st.warning("Nothing matches that search.")
+        else:
+            st.dataframe(table, hide_index=True)
+        st.caption("Usual trend describes the general pattern in the NASA FD001 data as engines "
+                   "wear out. It is a hint and not a rule for every engine.")
+
+        with st.expander("Seven columns the models ignore"):
+            st.write("These never change in the FD001 data, so they carry no information about "
+                     "wear. You do not need to supply them, the app fills them in for you.")
+            st.dataframe(pd.DataFrame(
+                [{"Column": c, "Name": f"{n} ({s})"} for c, (s, n) in UNUSED_INFO.items()]),
+                hide_index=True)
+
+    @staticmethod
+    def _results():
+        st.subheader("The result panel")
+        st.markdown(
+            "- **Gauge and big number**: estimated flight cycles left. The needle sits on a dial "
+            "that runs from 0 on the left to 125 on the right.\n"
+            "- **Status label**: Healthy, Watch or Critical, based on the alert levels.\n"
+            "- **Suggestion**: one line telling you what to do next.\n"
+            "- **Facts row**: the model used, how many cycles you gave, the latest cycle, the alert "
+            "levels, and in example mode the actual remaining life.")
+
+        st.subheader("Status labels")
+        st.dataframe(pd.DataFrame({
+            "Status": ["Critical", "Watch", "Healthy"],
+            "Default rule": ["Estimate below 30 cycles", "Estimate below 70 cycles",
+                             "Estimate of 70 cycles or more"],
+            "Suggestion": [PredictPage.ADVICE["CRITICAL"], PredictPage.ADVICE["WATCH"],
+                           PredictPage.ADVICE["HEALTHY"]]}), hide_index=True)
+        st.caption("Change the two levels under Options below the result.")
+
+        st.subheader("Why does it say 125+?")
+        st.write(f"The models are trained to answer at most {RUL_CAP} cycles. An engine far from "
+                 "failure looks almost the same as one that is somewhat far from failure, so asking "
+                 "the model to tell them apart only adds noise. A healthy engine therefore shows "
+                 f"{RUL_CAP}+ and not an exact number.")
+
+        st.subheader("Several engines in one file")
+        st.write("You get a table sorted with the engines closest to failure first, a count of "
+                 "how many are critical, on watch or healthy, and a button to download the table "
+                 "as a CSV. Use **Look closer at one engine** to open the full panel for any of them.")
+
+        st.subheader("How the estimate changed over time")
+        st.write("The expander below the panel draws the estimate for every cycle. A line that "
+                 "slopes down steadily is normal wear. A line that jumps around usually means "
+                 "noisy sensor data.")
+
+    @staticmethod
+    def _models():
+        st.subheader("Two models, one problem")
+        st.dataframe(pd.DataFrame({
+            "": ["Input", "Idea", "Needs at least", "Strength"],
+            "XGBoost": ["One row per cycle, plus rolling averages and spreads of every sensor",
+                        "Many small decision trees added together",
+                        "1 cycle, but 30 or more is better", "Fast and steady"],
+            "LSTM": ["A window of the last 30 cycles",
+                     "A recurrent neural network that reads the window in order",
+                     "30 cycles", "Reads how sensors move over time"]}), hide_index=True)
+
+        st.subheader("How the data is prepared")
+        st.markdown(
+            "- The seven columns that never change are dropped.\n"
+            f"- The training target is capped at {RUL_CAP} cycles.\n"
+            "- A 27 cycle rolling mean and rolling standard deviation are added for every sensor.\n"
+            "- For the LSTM the values are scaled to the 0 to 1 range with a scaler fitted on "
+            "training data only.")
+
+        st.subheader("How the models are scored")
+        st.dataframe(pd.DataFrame({
+            "Score": ["MAE", "MSE", "RMSE", "R2", "NASA score"],
+            "Meaning": ["Average miss in cycles. Lower is better.",
+                        "Average squared miss. Punishes big mistakes.",
+                        "Square root of MSE, back in cycles. Lower is better.",
+                        "Share of the variation explained. Closer to 1 is better.",
+                        "Punishes late predictions harder than early ones. Lower is better."]}),
+            hide_index=True)
+        st.caption("Predicting failure too late is more dangerous than predicting it too early, "
+                   "which is why the NASA score is lopsided.")
+
+    @staticmethod
+    def _dashboard():
+        st.write("The analyst dashboard is for people who want to dig into the models. Its "
+                 "controls are in the sidebar: which models to show, which engine to look at, "
+                 "and the two alert levels.")
+        st.subheader("Live replay")
+        st.write("Pick a test engine and move the Cycle slider, or press **Play replay**, to watch "
+                 "the predictions evolve against the true curve. Choose sensors under **Sensors to "
+                 "watch** to see how far each one is from the fleet average, measured in standard "
+                 "deviations.")
+        st.subheader("Fault injection")
+        st.write("Choose a sensor, a drift size and how many of the final cycles it drifts over. The "
+                 "models read the doctored history and show how much remaining life they think "
+                 "was lost. The **Run sweep** button repeats this for every sensor, so you can see "
+                 "which one the engine reacts to most.")
+        st.subheader("Fleet view")
+        st.write("Scores for all 100 test engines, a scatter of predicted against actual life, a "
+                 "maintenance queue of the 15 engines closest to failure, and the engines where "
+                 "the two models disagree most.")
+        st.subheader("Under the hood")
+        st.write("Shows the class hierarchy, which methods each class overrides, and a small "
+                 "encapsulation demo that tries to set an invalid `rul_cap`.")
+
+    @staticmethod
+    def _help():
+        st.subheader("Common messages")
+        items = {
+            "These columns are missing": "Your file lacks one or more required columns. Download "
+                "the template from the upload page and copy its column names.",
+            "The LSTM needs at least 30 cycles": "Add more rows for that engine, or switch to "
+                "XGBoost under Options.",
+            "No header row": "Add a first row with the column names from the template. Raw NASA "
+                "files with 26 columns and no header are the only exception.",
+            "Blank cells were filled": "Not an error. Gaps were filled with the nearest reading "
+                "from the same engine. Check that the result still makes sense.",
+            "lstm_model.keras not found": "The app runs with XGBoost only. Run `lstm_model.ipynb` "
+                "to create the LSTM file.",
+        }
+        for title, text in items.items():
+            with st.expander(title):
+                st.write(text)
+
+        st.subheader("Limits to keep in mind")
+        st.markdown(
+            "- The models were trained on FD001, which has one operating condition and one fault "
+            "type. They are not reliable for engines that behave differently.\n"
+            f"- Estimates stop at {RUL_CAP} cycles by design.\n"
+            "- The LSTM scores in the notebook use the uncapped true value, while the dashboard "
+            "caps it for every model so the comparison is fair. The numbers will differ a little.\n"
+            "- This is a learning project, so do not use it to make real maintenance decisions.")
+
+
 def _navigation():
-    options = ["Predict", "Analyst dashboard"]
+    options = ["Predict", "Analyst dashboard", "User manual"]
     if hasattr(st, "segmented_control"):
         st.segmented_control("View", options, default=options[0], key="view",
                              label_visibility="collapsed")
@@ -892,6 +1250,11 @@ def main():
         with middle:
             _navigation()
             PredictPage(assets).run()
+    elif view == "User manual":
+        _, middle, _ = st.columns([1, 6, 1])
+        with middle:
+            _navigation()
+            ManualPage().run()
     else:
         _navigation()
         ConsoleApp(assets).run()
