@@ -33,9 +33,7 @@ class RegressionEvaluator:
         return scores.sum()
 
 
-# ======================================================================
 # Preprocessing contract
-# ======================================================================
 class BaseRULPreprocessor(ABC):
     """Abstract preprocessor: shared cleaning logic + an abstract `prepare()` step."""
 
@@ -109,9 +107,7 @@ class BaseRULPreprocessor(ABC):
         return f"{type(self).__name__}(rul_cap={self._rul_cap}, window={self._window})"
 
 
-# ======================================================================
 # Model contract
-# ======================================================================
 class BaseRULModel(ABC):
     """Abstract RUL model. Subclasses implement the model-specific steps;
     fit / predict / evaluate are written once here (template-method pattern)."""
@@ -190,9 +186,7 @@ class BaseRULModel(ABC):
         return f"{type(self).__name__}(name='{self._name}', {state})"
 
 
-# ======================================================================
 # Polymorphic orchestration
-# ======================================================================
 class ExperimentRunner:
     """Runs preprocessing -> training -> evaluation for ANY (preprocessor, model) pair.
 
