@@ -2,6 +2,8 @@
 
 > **Educational project.** This was built for learning, as part of a university course on object oriented programming, using a public research dataset. It is not a certified maintenance tool and must not be used to make real decisions about aircraft or any other machinery.
 
+**Live demo:** [https://engine-life-predictor.streamlit.app](https://engine-life-predictor.streamlit.app)
+
 A small project that estimates how many flight cycles a jet engine has left before it needs maintenance. It is trained on NASA's C-MAPSS turbofan data (the FD001 subset) and comes with a Streamlit app where you can upload your own sensor readings and get an answer.
 
 I built it to compare two very different approaches on the same problem: gradient boosted trees on hand-made rolling features (XGBoost), and a recurrent network that reads a window of recent cycles (LSTM). The app lets you use either one.
