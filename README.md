@@ -6,13 +6,15 @@ I built it to compare two very different approaches on the same problem: gradien
 
 ## What the app does:
 
-The app has two views, switched from the top of the page.
+The app has three views, switched from the top of the page.
 
 **Predict** is the main page. You give it sensor readings in one of three ways:
 
 1. Upload a CSV file.
 2. Type readings into an editable table.
 3. Try one of the real test engines from the NASA data. In this mode the page also shows the true remaining life next to the model's guess, so you can see how close it got.
+
+Sensors are shown with their NASA names (for example `sensor_11` appears as "HPC outlet static pressure (Ps30)"), and hovering over a column title in the manual table explains what it measures.
 
 The result is a gauge, a large number of remaining flight cycles, a status (healthy, watch or critical) and a one line suggestion. If your file contains several engines, you get a table sorted by how close each one is to failure, and you can download it as a CSV.
 
@@ -22,6 +24,10 @@ The result is a gauge, a large number of remaining flight cycles, a status (heal
 - Fault injection: make one sensor drift away from normal over the last few cycles and see how much the estimate moves.
 - Fleet view: scores for all 100 test engines, a scatter of predicted against actual, and a maintenance queue.
 - Under the hood: the class hierarchy, which methods each class overrides, and a small encapsulation demo.
+
+Sensor pickers in the replay and fault injection tabs use the same friendly names.
+
+**User manual** is a plain language guide inside the app. It has seven tabs: quick start, your data, a searchable sensor guide, how to read the result, the two models, the analyst dashboard, and help with common messages and limits.
 
 ## Project layout
 ```
@@ -38,13 +44,13 @@ predictive_maintenance/
 │   ├── handle_data.py          # Dataset loading and RUL calculation
 │   └── models.py               # Preprocessing and XGBoost/LSTM model definitions
 │
-├── xgboost.ipynb           # XGBoost training and evaluation
-├── lstm_model.ipynb       # LSTM training and evaluation
+├── xgboost.ipynb               # XGBoost training and evaluation
+├── lstm_model.ipynb            # LSTM training and evaluation
 │
-├── xgb_model.json          # Saved XGBoost model
-├── lstm_model.keras        # Saved LSTM model
+├── xgb_model.json              # Saved XGBoost model
+├── lstm_model.keras            # Saved LSTM model
 │
-├── app.py                      # Streamlit application entry point
+├── app.py                      # Streamlit app: Predict, Analyst dashboard, User manual
 ├── requirements.txt            # Python dependencies
 ├── README.md                   # Project documentation
 └── .gitignore                  # Files excluded from version control
@@ -54,11 +60,13 @@ The `.streamlit` folder starts with a dot, so Finder and some file explorers hid
 
 ## Setup
 
-You need Python and a few libraries:
+You need Python 3.11 or 3.12 and the libraries in `requirements.txt`:
 
 ```
-pip install streamlit pandas numpy scikit-learn xgboost tensorflow altair
+pip install -r requirements.txt
 ```
+
+The file lists only what the app and the two notebooks use. The `tensorflow-metal` line applies to Macs only and is skipped on other systems.
 
 Put the C-MAPSS text files (`train_FD001.txt`, `test_FD001.txt` and `RUL_FD001.txt`) in the `CMaps` folder. The dataset is published by the NASA Prognostics Center of Excellence.
 
@@ -86,7 +94,7 @@ Your file needs one row per flight cycle and these columns:
 - `setting_1` and `setting_2`
 - `sensor_2`, `sensor_3`, `sensor_4`, `sensor_6`, `sensor_7`, `sensor_8`, `sensor_9`, `sensor_11`, `sensor_12`, `sensor_13`, `sensor_14`, `sensor_15`, `sensor_17`, `sensor_20`, `sensor_21`
 
-Two more columns are optional. `cycle` is the flight number counted from the engine's first flight (if it is missing, rows are numbered 1, 2, 3 in the order given). `engine_id` lets you score several engines in one file.
+Hover over a column title in the app, or open the sensor guide in the User manual, to see what each one measures and its unit. Two more columns are optional. `cycle` is the flight number counted from the engine's first flight (if it is missing, rows are numbered 1, 2, 3 in the order given). `engine_id` lets you score several engines in one file.
 
 Commas, semicolons and tabs all work as separators, and so do the original NASA `.txt` files that have no header row. The app has a button that downloads a template CSV with the right layout. Blank cells are filled with the nearest reading from the same engine, and you are told when that happens.
 
@@ -117,11 +125,14 @@ I used this project to practise object oriented design, and the code is organise
 
 The "Under the hood" tab in the dashboard shows all of this live.
 
+The sensor names, units and descriptions live in `SENSOR_INFO` and `SETTING_INFO` at the top of `app.py`. They only change what the front end displays. The models and preprocessors still use the original column names, so nothing in `src/` depends on them.
+
 ## Limitations
 
 - The models were trained on FD001, which has a single operating condition and a single fault type. They will not be reliable for engines that behave differently.
 - The `cycle` number is one of the XGBoost features, so your cycle counting should start from the engine's first flight.
 - Estimates stop at 125 cycles by design. For a healthy engine the app shows "125+".
+- This is a learning project, so it should not be used for real maintenance decisions.
 - The LSTM scores in the notebook use the uncapped true value, while the dashboard caps it for every model so the comparison is fair. The numbers will differ a little.
 
 ## License
