@@ -1,5 +1,7 @@
 # Engine Remaining Useful Life Predictor
 
+> **Educational project.** This was built for learning, as part of a university course on object oriented programming, using a public research dataset. It is not a certified maintenance tool and must not be used to make real decisions about aircraft or any other machinery.
+
 A small project that estimates how many flight cycles a jet engine has left before it needs maintenance. It is trained on NASA's C-MAPSS turbofan data (the FD001 subset) and comes with a Streamlit app where you can upload your own sensor readings and get an answer.
 
 I built it to compare two very different approaches on the same problem: gradient boosted trees on hand-made rolling features (XGBoost), and a recurrent network that reads a window of recent cycles (LSTM). The app lets you use either one.
@@ -36,7 +38,7 @@ predictive_maintenance/
 ├── .streamlit/
 │   └── config.toml             # Streamlit theme and app configuration
 │
-├── CMaps/                      # NASA C-MAPSS dataset files
+├── CMaps/                      # NASA C-MAPSS data (only the three FD001 files are needed)
 │
 ├── src/
 │   ├── __init__.py
@@ -68,7 +70,9 @@ pip install -r requirements.txt
 
 The file lists only what the app and the two notebooks use. The `tensorflow-metal` line applies to Macs only and is skipped on other systems.
 
-Put the C-MAPSS text files (`train_FD001.txt`, `test_FD001.txt` and `RUL_FD001.txt`) in the `CMaps` folder. The dataset is published by the NASA Prognostics Center of Excellence.
+Put the C-MAPSS text files (`train_FD001.txt`, `test_FD001.txt` and `RUL_FD001.txt`) in the `CMaps` folder. The dataset is published by the NASA Prognostics Center of Excellence. The other subsets (FD002 to FD004) are not used.
+
+The app needs the training file even though the models are already trained. The LSTM's scaler is refitted from it at startup, the dashboard takes each sensor's average and spread from it, and it is the fallback if `xgb_model.json` is missing. The test file and `RUL_FD001.txt` power the examples and the fleet view.
 
 ## Running it
 
@@ -86,6 +90,22 @@ Two details about the model files:
 - If `lstm_model.keras` is missing, the app runs with XGBoost only. Run `lstm_model.ipynb` to create it.
 
 The theme is read from `.streamlit/config.toml` when Streamlit starts, so restart the app after you change that file.
+
+## Deploying on Streamlit Community Cloud
+
+The app can be hosted for free. A few things to get right:
+
+- Choose Python 3.12 (or 3.11) under Advanced settings. The pinned TensorFlow and pandas versions need it.
+- Set the main file path to `app.py`.
+- Commit `requirements.txt`, the `.streamlit` folder, `xgb_model.json`, `lstm_model.keras` and the three FD001 files. If your `.gitignore` excludes the data folder, use these two lines so only the needed files are tracked:
+
+```
+CMaps/*
+!CMaps/*_FD001.txt
+```
+
+- File names are case sensitive on the server, so keep `RUL_FD001.txt` exactly as written.
+- If the free tier runs out of memory, deploy without TensorFlow. Remove `tensorflow` and `keras` from `requirements.txt` and leave out `lstm_model.keras`, and the app runs with XGBoost only.
 
 ## Using your own data
 
@@ -132,8 +152,15 @@ The sensor names, units and descriptions live in `SENSOR_INFO` and `SETTING_INFO
 - The models were trained on FD001, which has a single operating condition and a single fault type. They will not be reliable for engines that behave differently.
 - The `cycle` number is one of the XGBoost features, so your cycle counting should start from the engine's first flight.
 - Estimates stop at 125 cycles by design. For a healthy engine the app shows "125+".
-- This is a learning project, so it should not be used for real maintenance decisions.
 - The LSTM scores in the notebook use the uncapped true value, while the dashboard caps it for every model so the comparison is fair. The numbers will differ a little.
+
+## Disclaimer
+
+This is an educational project. The predictions come from models trained on simulated engine data, so they are a learning exercise and not engineering advice. Do not rely on them for real maintenance, safety or operational decisions.
+
+## Credits
+
+The data comes from the NASA Prognostics Center of Excellence C-MAPSS turbofan degradation dataset. This project is not affiliated with or endorsed by NASA.
 
 ## License
 
