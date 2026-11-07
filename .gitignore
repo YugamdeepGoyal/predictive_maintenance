@@ -173,5 +173,6 @@ $RECYCLE.BIN/
 
 .vscode
 
-CMaps
+CMaps/*
+!CMaps/*_FD001.txt
 junk
